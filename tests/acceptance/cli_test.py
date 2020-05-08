@@ -2903,3 +2903,12 @@ services:
         assert re.search(r'foo1.+test[ \t]+dev', result.stdout) is not None
         assert re.search(r'foo2.+test[ \t]+prod', result.stdout) is not None
         assert re.search(r'foo3.+test[ \t]+latest', result.stdout) is not None
+
+    def test_up_disable_log_prefix(self):
+        self.base_dir = 'tests/fixtures/echo-services'
+        result = self.dispatch(['up', '--no-color', '--disable-log-prefix'])
+
+        assert 'simple' in result.stdout
+        assert 'another' in result.stdout
+        assert 'exited with code 0' in result.stdout
+        assert 'exited with code 0' in result.stdout

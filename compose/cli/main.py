@@ -1025,6 +1025,7 @@ class TopLevelCommand(object):
                                        container. Implies --abort-on-container-exit.
             --scale SERVICE=NUM        Scale SERVICE to NUM instances. Overrides the
                                        `scale` setting in the Compose file if present.
+            --disable-log-prefix       Don't print prefix in logs.
         """
         start_deps = not options['--no-deps']
         always_recreate_deps = options['--always-recreate-deps']
@@ -1036,6 +1037,7 @@ class TopLevelCommand(object):
         detached = options.get('--detach')
         no_start = options.get('--no-start')
         attach_dependencies = options.get('--attach-dependencies')
+        keep_prefix = options.get('--disable-log-prefix') is None
 
         if detached and (cascade_stop or exit_value_from or attach_dependencies):
             raise UserError(
@@ -1102,7 +1104,8 @@ class TopLevelCommand(object):
                 set_no_color_if_clicolor(options['--no-color']),
                 {'follow': True},
                 cascade_stop,
-                event_stream=self.project.events(service_names=service_names))
+                event_stream=self.project.events(service_names=service_names),
+                keep_prefix=keep_prefix)
             print("Attaching to", list_containers(log_printer.containers))
             cascade_starter = log_printer.run()
 
@@ -1390,10 +1393,11 @@ def log_printer_from_project(
     log_args,
     cascade_stop=False,
     event_stream=None,
+    keep_prefix=True,
 ):
     return LogPrinter(
         containers,
-        build_log_presenters(project.service_names, monochrome),
+        build_log_presenters(project.service_names, monochrome, keep_prefix),
         event_stream or project.events(),
         cascade_stop=cascade_stop,
         log_args=log_args)
