@@ -2906,7 +2906,7 @@ services:
 
     def test_up_disable_log_prefix(self):
         self.base_dir = 'tests/fixtures/echo-services'
-        result = self.dispatch(['up', '--no-color', '--disable-log-prefix'])
+        result = self.dispatch(['up', '--disable-log-prefix'])
 
         assert 'simple' in result.stdout
         assert 'another' in result.stdout

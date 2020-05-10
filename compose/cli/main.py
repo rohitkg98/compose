@@ -612,11 +612,12 @@ class TopLevelCommand(object):
         Usage: logs [options] [SERVICE...]
 
         Options:
-            --no-color          Produce monochrome output.
-            -f, --follow        Follow log output.
-            -t, --timestamps    Show timestamps.
-            --tail="all"        Number of lines to show from the end of the logs
-                                for each container.
+            --no-color              Produce monochrome output.
+            -f, --follow            Follow log output.
+            -t, --timestamps        Show timestamps.
+            --tail="all"            Number of lines to show from the end of the logs
+                                    for each container.
+            --disable-log-prefix    Don't print prefix in logs.
         """
         containers = self.project.containers(service_names=options['SERVICE'], stopped=True)
 
@@ -637,7 +638,8 @@ class TopLevelCommand(object):
             containers,
             set_no_color_if_clicolor(options['--no-color']),
             log_args,
-            event_stream=self.project.events(service_names=options['SERVICE'])).run()
+            event_stream=self.project.events(service_names=options['SERVICE']),
+            keep_prefix=not options['--disable-log-prefix']).run()
 
     def pause(self, options):
         """
@@ -1037,7 +1039,7 @@ class TopLevelCommand(object):
         detached = options.get('--detach')
         no_start = options.get('--no-start')
         attach_dependencies = options.get('--attach-dependencies')
-        keep_prefix = options.get('--disable-log-prefix') is None
+        keep_prefix = not options['--disable-log-prefix']
 
         if detached and (cascade_stop or exit_value_from or attach_dependencies):
             raise UserError(
