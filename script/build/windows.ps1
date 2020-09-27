@@ -16,7 +16,7 @@
 #
 # 4. In Powershell, run the following commands:
 #
-#        $ pip install 'virtualenv==16.2.0'
+#        $ pip install 'virtualenv==20.0.30'
 #        $ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 #
 # 5. Clone the repository:
@@ -45,6 +45,7 @@ virtualenv -p C:\Python37\python.exe .\venv
 $ErrorActionPreference = "Continue"
 
 .\venv\Scripts\pip install pypiwin32==223
+.\venv\Scripts\pip install -r requirements-indirect.txt
 .\venv\Scripts\pip install -r requirements.txt
 .\venv\Scripts\pip install --no-deps .
 .\venv\Scripts\pip install -r requirements-build.txt

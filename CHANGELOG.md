@@ -1,6 +1,141 @@
 Change log
 ==========
 
+1.27.3 (2020-09-16)
+-------------------
+
+### Bugs
+
+- Merge `max_replicas_per_node` on `docker-compose config`
+
+- Fix `depends_on` serialization on `docker-compose config`
+
+- Fix scaling when some containers are not running on `docker-compose up`
+
+- Enable relative paths for `driver_opts.device` for `local` driver
+
+- Allow strings for `cpus` fields
+
+1.27.2 (2020-09-10)
+-------------------
+
+### Bugs
+
+- Fix bug on `docker-compose run` container attach
+
+1.27.1 (2020-09-10)
+-------------------
+
+### Bugs
+
+- Fix `docker-compose run` when `service.scale` is specified
+
+- Allow `driver` property for external networks as temporary workaround for swarm network propagation issue
+
+- Pin new internal schema version to `3.9` as the default
+
+- Preserve the version when configured in the compose file
+
+1.27.0 (2020-09-07)
+-------------------
+
+### Features
+
+- Merge 2.x and 3.x compose formats and align with COMPOSE_SPEC schema
+
+- Implement service mode for ipc
+
+- Pass `COMPOSE_PROJECT_NAME` environment variable in container mode
+
+- Make run behave in the same way as up
+
+- Use `docker build` on `docker-compose run` when `COMPOSE_DOCKER_CLI_BUILD` environment variable is set
+
+- Use docker-py default API version for engine queries (`auto`)
+
+- Parse `network_mode` on build
+
+### Bugs
+
+- Ignore build context path validation when building is not required
+
+- Fix float to bytes conversion via docker-py bump to 4.3.1
+
+- Fix scale bug when deploy section is set
+
+- Fix `docker-py` bump in `setup.py`
+
+- Fix experimental build failure detection
+
+- Fix context propagation to docker cli
+
+### Miscellaneous
+
+- Drop support for Python 2.7
+
+- Bump `docker-py` to 4.3.1
+
+- Bump `tox` to 3.19.0
+
+- Bump `virtualenv` to 20.0.30
+
+- Add script for docs syncronization
+
+1.26.2 (2020-07-02)
+-------------------
+
+### Bugs
+
+- Enforce `docker-py` 4.2.2 as minimum version when installing with pip
+
+1.26.1 (2020-06-30)
+-------------------
+
+### Features
+
+- Bump `docker-py` from 4.2.1 to 4.2.2
+
+### Bugs
+
+- Enforce `docker-py` 4.2.1 as minimum version when installing with pip
+
+- Fix context load for non-docker endpoints
+
+1.26.0 (2020-06-03)
+-------------------
+
+### Features
+
+- Add `docker context` support
+
+- Add missing test dependency `ddt` to `setup.py`
+
+- Add `--attach-dependencies` to command `up` for attaching to dependencies
+
+- Allow compatibility option with `COMPOSE_COMPATIBILITY` environment variable
+
+- Bump `Pytest` to 5.3.4 and add refactor compatibility with new version
+
+- Bump `OpenSSL` from 1.1.1f to 1.1.1g
+
+- Bump `docker-py` from 4.2.0 to 4.2.1
+
+### Bugs
+
+- Properly escape values coming from env_files
+
+- Sync compose-schemas with upstream (docker/cli)
+
+- Remove `None` entries on exec command
+
+- Add `python-dotenv` to delegate `.env` file processing
+
+- Don't adjust output on terminal width when piped into another command
+
+- Show an error message when `version` attribute is malformed
+
+- Fix HTTPS connection when DOCKER_HOST is remote
+
 1.25.5 (2020-02-04)
 -------------------
 

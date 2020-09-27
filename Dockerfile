@@ -24,8 +24,6 @@ RUN apk add --no-cache \
     musl-dev \
     openssl \
     openssl-dev \
-    python2 \
-    python2-dev \
     zlib-dev
 ENV BUILD_BOOTLOADER=1
 
@@ -40,7 +38,6 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     libssl-dev \
     make \
     openssl \
-    python2.7-dev \
     zlib1g-dev
 
 FROM build-${BUILD_PLATFORM} AS build
@@ -49,9 +46,10 @@ ENTRYPOINT ["sh", "/usr/local/bin/docker-compose-entrypoint.sh"]
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 WORKDIR /code/
 # FIXME(chris-crone): virtualenv 16.3.0 breaks build, force 16.2.0 until fixed
-RUN pip install virtualenv==16.2.0
-RUN pip install tox==2.9.1
+RUN pip install virtualenv==20.0.30
+RUN pip install tox==3.19.0
 
+COPY requirements-indirect.txt .
 COPY requirements.txt .
 COPY requirements-dev.txt .
 COPY .pre-commit-config.yaml .

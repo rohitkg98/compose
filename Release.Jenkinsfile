@@ -20,7 +20,7 @@ pipeline {
             parallel {
                 stage('alpine') {
                     agent {
-                        label 'linux'
+                        label 'linux && docker && ubuntu-2004'
                     }
                     steps {
                         buildImage('alpine')
@@ -28,7 +28,7 @@ pipeline {
                 }
                 stage('debian') {
                     agent {
-                        label 'linux'
+                        label 'linux && docker && ubuntu-2004'
                     }
                     steps {
                         buildImage('debian')
@@ -37,6 +37,9 @@ pipeline {
             }
         }
         stage('Test') {
+            agent {
+                label 'linux && docker && ubuntu-2004'
+            }
             steps {
                 // TODO use declarative 1.5.0 `matrix` once available on CI
                 script {
@@ -55,7 +58,7 @@ pipeline {
         }
         stage('Generate Changelog') {
             agent {
-                label 'linux'
+                label 'linux && docker && ubuntu-2004'
             }
             steps {
                 checkout scm
@@ -92,7 +95,7 @@ pipeline {
                 }
                 stage('linux binary') {
                     agent {
-                        label 'linux'
+                        label 'linux && docker && ubuntu-2004'
                     }
                     steps {
                         checkout scm
@@ -128,7 +131,7 @@ pipeline {
                 }
                 stage('alpine image') {
                     agent {
-                        label 'linux'
+                        label 'linux && docker && ubuntu-2004'
                     }
                     steps {
                         buildRuntimeImage('alpine')
@@ -136,7 +139,7 @@ pipeline {
                 }
                 stage('debian image') {
                     agent {
-                        label 'linux'
+                        label 'linux && docker && ubuntu-2004'
                     }
                     steps {
                         buildRuntimeImage('debian')
@@ -151,7 +154,7 @@ pipeline {
             parallel {
                 stage('Pushing images') {
                     agent {
-                        label 'linux'
+                        label 'linux && docker && ubuntu-2004'
                     }
                     steps {
                         pushRuntimeImage('alpine')
@@ -160,7 +163,7 @@ pipeline {
                 }
                 stage('Creating Github Release') {
                     agent {
-                        label 'linux'
+                        label 'linux && docker && ubuntu-2004'
                     }
                     environment {
                         GITHUB_TOKEN = credentials('github-release-token')
@@ -192,7 +195,7 @@ pipeline {
                 }
                 stage('Publishing Python packages') {
                     agent {
-                        label 'linux'
+                        label 'linux && docker && ubuntu-2004'
                     }
                     environment {
                         PYPIRC = credentials('pypirc-docker-dsg-cibot')
@@ -201,9 +204,9 @@ pipeline {
                         checkout scm
                         sh """
                             rm -rf build/ dist/
-                            pip install wheel
-                            python setup.py sdist bdist_wheel
-                            pip install twine
+                            pip3 install wheel
+                            python3 setup.py sdist bdist_wheel
+                            pip3 install twine
                             ~/.local/bin/twine upload --config-file ${PYPIRC} ./dist/docker-compose-*.tar.gz ./dist/docker_compose-*-py2.py3-none-any.whl
                         """
                     }
@@ -241,7 +244,7 @@ def buildImage(baseImage) {
 def runTests(dockerVersion, pythonVersion, baseImage) {
     return {
         stage("python=${pythonVersion} docker=${dockerVersion} ${baseImage}") {
-            node("linux") {
+            node("linux && docker && ubuntu-2004") {
                 def scmvar = checkout(scm)
                 def imageName = "dockerbuildbot/compose:${baseImage}-${scmvar.GIT_COMMIT}"
                 def storageDriver = sh(script: "docker info -f \'{{.Driver}}\'", returnStdout: true).trim()

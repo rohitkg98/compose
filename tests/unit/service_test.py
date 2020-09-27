@@ -1,6 +1,3 @@
-from __future__ import absolute_import
-from __future__ import unicode_literals
-
 import docker
 import pytest
 from docker.constants import DEFAULT_DOCKER_API_VERSION
@@ -66,9 +63,9 @@ class ServiceTest(unittest.TestCase):
         assert [c.id for c in service.containers()] == list(range(3))
 
         expected_labels = [
-            '{0}=myproject'.format(LABEL_PROJECT),
-            '{0}=db'.format(LABEL_SERVICE),
-            '{0}=False'.format(LABEL_ONE_OFF),
+            '{}=myproject'.format(LABEL_PROJECT),
+            '{}=db'.format(LABEL_SERVICE),
+            '{}=False'.format(LABEL_ONE_OFF),
         ]
 
         self.mock_client.containers.assert_called_once_with(

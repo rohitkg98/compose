@@ -1,9 +1,5 @@
-from __future__ import absolute_import
-from __future__ import unicode_literals
-
 from functools import reduce
 
-import six
 from docker.errors import ImageNotFound
 
 from .const import LABEL_CONTAINER_NUMBER
@@ -16,7 +12,7 @@ from .utils import truncate_id
 from .version import ComposeVersion
 
 
-class Container(object):
+class Container:
     """
     Represents a Docker container, constructed from the output of
     GET /containers/:id:/json.
@@ -82,8 +78,8 @@ class Container(object):
 
     @property
     def name_without_project(self):
-        if self.name.startswith('{0}_{1}'.format(self.project, self.service)):
-            return '{0}_{1}'.format(self.service, self.number if self.number is not None else self.slug)
+        if self.name.startswith('{}_{}'.format(self.project, self.service)):
+            return '{}_{}'.format(self.service, self.number if self.number is not None else self.slug)
         else:
             return self.name
 
@@ -95,7 +91,7 @@ class Container(object):
 
         number = self.labels.get(LABEL_CONTAINER_NUMBER)
         if not number:
-            raise ValueError("Container {0} does not have a {1} label".format(
+            raise ValueError("Container {} does not have a {} label".format(
                 self.short_id, LABEL_CONTAINER_NUMBER))
         return int(number)
 
@@ -130,7 +126,7 @@ class Container(object):
 
         return ', '.join(
             ','.join(format_port(*item))
-            for item in sorted(six.iteritems(self.ports))
+            for item in sorted(self.ports.items())
         )
 
     @property
@@ -193,7 +189,7 @@ class Container(object):
     @property
     def has_api_logs(self):
         log_type = self.log_driver
-        return not log_type or log_type in ('json-file', 'journald')
+        return not log_type or log_type in ('json-file', 'journald', 'local')
 
     @property
     def human_readable_health_status(self):
@@ -208,8 +204,8 @@ class Container(object):
         return status_string
 
     def attach_log_stream(self):
-        """A log stream can only be attached if the container uses a json-file
-        log driver.
+        """A log stream can only be attached if the container uses a
+        json-file, journald or local log driver.
         """
         if self.has_api_logs:
             self.log_stream = self.attach(stdout=True, stderr=True, stream=True)
@@ -228,7 +224,7 @@ class Container(object):
         return reduce(get_value, key.split('.'), self.dictionary)
 
     def get_local_port(self, port, protocol='tcp'):
-        port = self.ports.get("%s/%s" % (port, protocol))
+        port = self.ports.get("{}/{}".format(port, protocol))
         return "{HostIp}:{HostPort}".format(**port[0]) if port else None
 
     def get_mount(self, mount_dest):
@@ -270,7 +266,7 @@ class Container(object):
         """
         if not self.name.startswith(self.short_id):
             self.client.rename(
-                self.id, '{0}_{1}'.format(self.short_id, self.name)
+                self.id, '{}_{}'.format(self.short_id, self.name)
             )
 
     def inspect_if_not_inspected(self):
@@ -313,7 +309,7 @@ class Container(object):
         )
 
     def __repr__(self):
-        return '<Container: %s (%s)>' % (self.name, self.id[:6])
+        return '<Container: {} ({})>'.format(self.name, self.id[:6])
 
     def __eq__(self, other):
         if type(self) != type(other):

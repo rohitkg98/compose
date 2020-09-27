@@ -1,6 +1,3 @@
-from __future__ import absolute_import
-from __future__ import unicode_literals
-
 import tempfile
 
 from ddt import data
@@ -18,7 +15,7 @@ from tests.integration.testcases import DockerClientTestCase
 class EnvironmentTest(DockerClientTestCase):
     @classmethod
     def setUpClass(cls):
-        super(EnvironmentTest, cls).setUpClass()
+        super().setUpClass()
         cls.compose_file = tempfile.NamedTemporaryFile(mode='w+b')
         cls.compose_file.write(bytes("""version: '3.2'
 services:
@@ -30,7 +27,7 @@ services:
 
     @classmethod
     def tearDownClass(cls):
-        super(EnvironmentTest, cls).tearDownClass()
+        super().tearDownClass()
         cls.compose_file.close()
 
     @data('events',

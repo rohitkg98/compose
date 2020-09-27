@@ -1,15 +1,11 @@
-from __future__ import absolute_import
-from __future__ import unicode_literals
-
 import datetime
+import enum
 import logging
 import operator
 import re
 from functools import reduce
 from os import path
 
-import enum
-import six
 from docker.errors import APIError
 from docker.errors import ImageNotFound
 from docker.errors import NotFound
@@ -30,14 +26,17 @@ from .network import get_networks
 from .network import ProjectNetworks
 from .progress_stream import read_status
 from .service import BuildAction
+from .service import ContainerIpcMode
 from .service import ContainerNetworkMode
 from .service import ContainerPidMode
 from .service import ConvergenceStrategy
+from .service import IpcMode
 from .service import NetworkMode
 from .service import NoSuchImageError
 from .service import parse_repository_tag
 from .service import PidMode
 from .service import Service
+from .service import ServiceIpcMode
 from .service import ServiceNetworkMode
 from .service import ServicePidMode
 from .utils import microseconds_from_time_nano
@@ -56,16 +55,16 @@ class OneOffFilter(enum.Enum):
     @classmethod
     def update_labels(cls, value, labels):
         if value == cls.only:
-            labels.append('{0}={1}'.format(LABEL_ONE_OFF, "True"))
+            labels.append('{}={}'.format(LABEL_ONE_OFF, "True"))
         elif value == cls.exclude:
-            labels.append('{0}={1}'.format(LABEL_ONE_OFF, "False"))
+            labels.append('{}={}'.format(LABEL_ONE_OFF, "False"))
         elif value == cls.include:
             pass
         else:
             raise ValueError("Invalid value for one_off: {}".format(repr(value)))
 
 
-class Project(object):
+class Project:
     """
     A collection of services.
     """
@@ -81,7 +80,7 @@ class Project(object):
         name = self.name
         if legacy:
             name = re.sub(r'[_-]', '', name)
-        labels = ['{0}={1}'.format(LABEL_PROJECT, name)]
+        labels = ['{}={}'.format(LABEL_PROJECT, name)]
 
         OneOffFilter.update_labels(one_off, labels)
         return labels
@@ -110,6 +109,7 @@ class Project(object):
 
             service_dict.pop('networks', None)
             links = project.get_links(service_dict)
+            ipc_mode = project.get_ipc_mode(service_dict)
             network_mode = project.get_network_mode(
                 service_dict, list(service_networks.keys())
             )
@@ -127,6 +127,18 @@ class Project(object):
                 service_dict.pop('secrets', None) or [],
                 config_data.secrets)
 
+            service_dict['scale'] = project.get_service_scale(service_dict)
+
+            service_dict = translate_credential_spec_to_security_opt(service_dict)
+            service_dict, ignored_keys = translate_deploy_keys_to_container_config(
+                service_dict
+            )
+            if ignored_keys:
+                log.warning(
+                    'The following deploy sub-keys are not supported and have'
+                    ' been ignored: {}'.format(', '.join(ignored_keys))
+                )
+
             project.services.append(
                 Service(
                     service_dict.pop('name'),
@@ -139,6 +151,7 @@ class Project(object):
                     volumes_from=volumes_from,
                     secrets=secrets,
                     pid_mode=pid_mode,
+                    ipc_mode=ipc_mode,
                     platform=service_dict.pop('platform', None),
                     default_platform=default_platform,
                     extra_labels=extra_labels,
@@ -265,6 +278,58 @@ class Project(object):
                 )
 
         return PidMode(pid_mode)
+
+    def get_ipc_mode(self, service_dict):
+        ipc_mode = service_dict.pop('ipc', None)
+        if not ipc_mode:
+            return IpcMode(None)
+
+        service_name = get_service_name_from_network_mode(ipc_mode)
+        if service_name:
+            return ServiceIpcMode(self.get_service(service_name))
+
+        container_name = get_container_name_from_network_mode(ipc_mode)
+        if container_name:
+            try:
+                return ContainerIpcMode(Container.from_id(self.client, container_name))
+            except APIError:
+                raise ConfigurationError(
+                    "Service '{name}' uses the IPC namespace of container '{dep}' which "
+                    "does not exist.".format(name=service_dict['name'], dep=container_name)
+                )
+
+        return IpcMode(ipc_mode)
+
+    def get_service_scale(self, service_dict):
+        # service.scale for v2 and deploy.replicas for v3
+        scale = service_dict.get('scale', None)
+        deploy_dict = service_dict.get('deploy', None)
+        if not deploy_dict:
+            return 1 if scale is None else scale
+
+        if deploy_dict.get('mode', 'replicated') != 'replicated':
+            return 1 if scale is None else scale
+
+        replicas = deploy_dict.get('replicas', None)
+        if scale is not None and replicas is not None:
+            raise ConfigurationError(
+                "Both service.scale and service.deploy.replicas are set."
+                " Only one of them must be set."
+            )
+        if replicas is not None:
+            scale = replicas
+        if scale is None:
+            return 1
+        # deploy may contain placement constraints introduced in v3.8
+        max_replicas = deploy_dict.get('placement', {}).get(
+            'max_replicas_per_node',
+            scale)
+
+        scale = min(scale, max_replicas)
+        if max_replicas < scale:
+            log.warning("Scale is limited to {} ('max_replicas_per_node' field).".format(
+                max_replicas))
+        return scale
 
     def start(self, service_names=None, **options):
         containers = []
@@ -394,7 +459,7 @@ class Project(object):
             )
             if len(errors):
                 combined_errors = '\n'.join([
-                    e.decode('utf-8') if isinstance(e, six.binary_type) else e for e in errors.values()
+                    e.decode('utf-8') if isinstance(e, bytes) else e for e in errors.values()
                 ])
                 raise ProjectError(combined_errors)
 
@@ -486,10 +551,10 @@ class Project(object):
                 'action': event['status'],
                 'id': event['Actor']['ID'],
                 'service': container_attrs.get(LABEL_SERVICE),
-                'attributes': dict([
-                    (k, v) for k, v in container_attrs.items()
+                'attributes': {
+                    k: v for k, v in container_attrs.items()
                     if not k.startswith('com.docker.compose.')
-                ]),
+                },
                 'container': container,
             }
 
@@ -528,6 +593,8 @@ class Project(object):
            renew_anonymous_volumes=False,
            silent=False,
            cli=False,
+           one_off=False,
+           override_options=None,
            ):
 
         if cli:
@@ -547,7 +614,11 @@ class Project(object):
         for svc in services:
             svc.ensure_image_exists(do_build=do_build, silent=silent, cli=cli)
         plans = self._get_convergence_plans(
-            services, strategy, always_recreate_deps=always_recreate_deps)
+            services,
+            strategy,
+            always_recreate_deps=always_recreate_deps,
+            one_off=service_names if one_off else [],
+        )
 
         def do(service):
 
@@ -560,6 +631,7 @@ class Project(object):
                 start=start,
                 reset_container_image=reset_container_image,
                 renew_anonymous_volumes=renew_anonymous_volumes,
+                override_options=override_options,
             )
 
         def get_deps(service):
@@ -591,7 +663,7 @@ class Project(object):
         self.networks.initialize()
         self.volumes.initialize()
 
-    def _get_convergence_plans(self, services, strategy, always_recreate_deps=False):
+    def _get_convergence_plans(self, services, strategy, always_recreate_deps=False, one_off=None):
         plans = {}
 
         for service in services:
@@ -601,6 +673,7 @@ class Project(object):
                 if name in plans and
                 plans[name].action in ('recreate', 'create')
             ]
+            is_one_off = one_off and service.name in one_off
 
             if updated_dependencies and strategy.allows_recreate:
                 log.debug('%s has upstream changes (%s)',
@@ -612,11 +685,11 @@ class Project(object):
                 container_has_links = any(c.get('HostConfig.Links') for c in service.containers())
                 should_recreate_for_links = service_has_links ^ container_has_links
                 if always_recreate_deps or containers_stopped or should_recreate_for_links:
-                    plan = service.convergence_plan(ConvergenceStrategy.always)
+                    plan = service.convergence_plan(ConvergenceStrategy.always, is_one_off)
                 else:
-                    plan = service.convergence_plan(strategy)
+                    plan = service.convergence_plan(strategy, is_one_off)
             else:
-                plan = service.convergence_plan(strategy)
+                plan = service.convergence_plan(strategy, is_one_off)
 
             plans[service.name] = plan
 
@@ -684,7 +757,7 @@ class Project(object):
                         .format(' '.join(must_build)))
         if len(errors):
             combined_errors = '\n'.join([
-                e.decode('utf-8') if isinstance(e, six.binary_type) else e for e in errors.values()
+                e.decode('utf-8') if isinstance(e, bytes) else e for e in errors.values()
             ])
             raise ProjectError(combined_errors)
 
@@ -741,7 +814,7 @@ class Project(object):
             return
         if remove_orphans:
             for ctnr in orphans:
-                log.info('Removing orphan container "{0}"'.format(ctnr.name))
+                log.info('Removing orphan container "{}"'.format(ctnr.name))
                 try:
                     ctnr.kill()
                 except APIError:
@@ -749,7 +822,7 @@ class Project(object):
                 ctnr.remove(force=True)
         else:
             log.warning(
-                'Found orphan containers ({0}) for this project. If '
+                'Found orphan containers ({}) for this project. If '
                 'you removed or renamed this service in your compose '
                 'file, you can run this command with the '
                 '--remove-orphans flag to clean it up.'.format(
@@ -779,6 +852,81 @@ class Project(object):
                 _options['timeout'] = service.stop_timeout(None)
             return getattr(container, operation)(**_options)
         return container_operation_with_timeout
+
+
+def translate_credential_spec_to_security_opt(service_dict):
+    result = []
+
+    if 'credential_spec' in service_dict:
+        spec = convert_credential_spec_to_security_opt(service_dict['credential_spec'])
+        result.append('credentialspec={spec}'.format(spec=spec))
+
+    if result:
+        service_dict['security_opt'] = result
+
+    return service_dict
+
+
+def translate_resource_keys_to_container_config(resources_dict, service_dict):
+    if 'limits' in resources_dict:
+        service_dict['mem_limit'] = resources_dict['limits'].get('memory')
+        if 'cpus' in resources_dict['limits']:
+            service_dict['cpus'] = float(resources_dict['limits']['cpus'])
+    if 'reservations' in resources_dict:
+        service_dict['mem_reservation'] = resources_dict['reservations'].get('memory')
+        if 'cpus' in resources_dict['reservations']:
+            return ['resources.reservations.cpus']
+    return []
+
+
+def convert_restart_policy(name):
+    try:
+        return {
+            'any': 'always',
+            'none': 'no',
+            'on-failure': 'on-failure'
+        }[name]
+    except KeyError:
+        raise ConfigurationError('Invalid restart policy "{}"'.format(name))
+
+
+def convert_credential_spec_to_security_opt(credential_spec):
+    if 'file' in credential_spec:
+        return 'file://{file}'.format(file=credential_spec['file'])
+    return 'registry://{registry}'.format(registry=credential_spec['registry'])
+
+
+def translate_deploy_keys_to_container_config(service_dict):
+    if 'credential_spec' in service_dict:
+        del service_dict['credential_spec']
+    if 'configs' in service_dict:
+        del service_dict['configs']
+
+    if 'deploy' not in service_dict:
+        return service_dict, []
+
+    deploy_dict = service_dict['deploy']
+    ignored_keys = [
+        k for k in ['endpoint_mode', 'labels', 'update_config', 'rollback_config']
+        if k in deploy_dict
+    ]
+
+    if 'restart_policy' in deploy_dict:
+        service_dict['restart'] = {
+            'Name': convert_restart_policy(deploy_dict['restart_policy'].get('condition', 'any')),
+            'MaximumRetryCount': deploy_dict['restart_policy'].get('max_attempts', 0)
+        }
+        for k in deploy_dict['restart_policy'].keys():
+            if k != 'condition' and k != 'max_attempts':
+                ignored_keys.append('restart_policy.{}'.format(k))
+
+    ignored_keys.extend(
+        translate_resource_keys_to_container_config(
+            deploy_dict.get('resources', {}), service_dict
+        )
+    )
+    del service_dict['deploy']
+    return service_dict, ignored_keys
 
 
 def get_volumes_from(project, service_dict):
@@ -820,16 +968,16 @@ def get_secrets(service, service_secrets, secret_defs):
                 .format(service=service, secret=secret.source))
 
         if secret_def.get('external'):
-            log.warning("Service \"{service}\" uses secret \"{secret}\" which is external. "
-                        "External secrets are not available to containers created by "
-                        "docker-compose.".format(service=service, secret=secret.source))
+            log.warning('Service "{service}" uses secret "{secret}" which is external. '
+                        'External secrets are not available to containers created by '
+                        'docker-compose.'.format(service=service, secret=secret.source))
             continue
 
         if secret.uid or secret.gid or secret.mode:
             log.warning(
-                "Service \"{service}\" uses secret \"{secret}\" with uid, "
-                "gid, or mode. These fields are not supported by this "
-                "implementation of the Compose file".format(
+                'Service "{service}" uses secret "{secret}" with uid, '
+                'gid, or mode. These fields are not supported by this '
+                'implementation of the Compose file'.format(
                     service=service, secret=secret.source
                 )
             )
@@ -837,8 +985,8 @@ def get_secrets(service, service_secrets, secret_defs):
         secret_file = secret_def.get('file')
         if not path.isfile(str(secret_file)):
             log.warning(
-                "Service \"{service}\" uses an undefined secret file \"{secret_file}\", "
-                "the following file should be created \"{secret_file}\"".format(
+                'Service "{service}" uses an undefined secret file "{secret_file}", '
+                'the following file should be created "{secret_file}"'.format(
                     service=service, secret_file=secret_file
                 )
             )
@@ -934,7 +1082,7 @@ class NeedsPull(Exception):
 
 class NoSuchService(Exception):
     def __init__(self, name):
-        if isinstance(name, six.binary_type):
+        if isinstance(name, bytes):
             name = name.decode('utf-8')
         self.name = name
         self.msg = "No such service: %s" % self.name
