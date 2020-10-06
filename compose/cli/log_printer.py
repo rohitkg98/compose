@@ -16,7 +16,7 @@ from compose.utils import split_buffer
 
 class LogPresenter:
 
-    def __init__(self, prefix_width, color_func, keep_prefix):
+    def __init__(self, prefix_width, color_func, keep_prefix=True):
         self.prefix_width = prefix_width
         self.color_func = color_func
         self.keep_prefix = keep_prefix
