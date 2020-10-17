@@ -24,7 +24,7 @@ class LogPresenter:
     def present(self, container, line):
         to_log = '{line}'.format(line=line)
 
-        if self.keep_prefix is True:
+        if self.keep_prefix:
             prefix = container.name_without_project.ljust(self.prefix_width)
             to_log = '{prefix} '.format(prefix=self.color_func(prefix + ' |')) + to_log
 
