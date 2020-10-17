@@ -615,7 +615,7 @@ class TopLevelCommand:
             -t, --timestamps        Show timestamps.
             --tail="all"            Number of lines to show from the end of the logs
                                     for each container.
-            --disable-log-prefix    Don't print prefix in logs.
+            --no-log-prefix    Don't print prefix in logs.
         """
         containers = self.project.containers(service_names=options['SERVICE'], stopped=True)
 
@@ -637,7 +637,7 @@ class TopLevelCommand:
             set_no_color_if_clicolor(options['--no-color']),
             log_args,
             event_stream=self.project.events(service_names=options['SERVICE']),
-            keep_prefix=not options['--disable-log-prefix']).run()
+            keep_prefix=not options['--no-log-prefix']).run()
 
     def pause(self, options):
         """
@@ -1019,7 +1019,7 @@ class TopLevelCommand:
                                        container. Implies --abort-on-container-exit.
             --scale SERVICE=NUM        Scale SERVICE to NUM instances. Overrides the
                                        `scale` setting in the Compose file if present.
-            --disable-log-prefix       Don't print prefix in logs.
+            --no-log-prefix       Don't print prefix in logs.
         """
         start_deps = not options['--no-deps']
         always_recreate_deps = options['--always-recreate-deps']
@@ -1031,7 +1031,7 @@ class TopLevelCommand:
         detached = options.get('--detach')
         no_start = options.get('--no-start')
         attach_dependencies = options.get('--attach-dependencies')
-        keep_prefix = not options['--disable-log-prefix']
+        keep_prefix = not options['--no-log-prefix']
 
         if detached and (cascade_stop or exit_value_from or attach_dependencies):
             raise UserError(
